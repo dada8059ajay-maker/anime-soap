@@ -8,11 +8,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install ffmpeg
+      - name: Install ffmpeg + Blender system libs
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg
+          sudo apt-get install -y -qq ffmpeg libegl1 libgles2 libgl1
           ffmpeg -version | head -1
+          ldconfig -p | grep -E "libEGL|libGLESv2|libGL\.so" || true
 
       - name: Download Blender 5.2.4
         run: |

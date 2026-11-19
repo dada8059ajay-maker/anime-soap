@@ -1,0 +1,75 @@
+name: blender-vrm-test
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          ffmpeg -version | head -1
+
+      - name: Download Blender 5.2.4
+        run: |
+          set -e
+          curl -sL -o /tmp/blender.tar.xz https://download.blender.org/release/Blender5.2/blender-5.2.4-linux-x64.tar.xz
+          mkdir -p $HOME/blender
+          tar -xf /tmp/blender.tar.xz -C $HOME/blender --strip-components=1
+          $HOME/blender/blender --version
+
+      - name: Download VRM Add-on + Seed-san
+        run: |
+          set -e
+          curl -sL -o /tmp/vrm-addon.zip https://github.com/saturday06/VRM-Addon-for-Blender/releases/download/v4.10.5/VRM_Addon_for_Blender-4_10_5.zip
+          curl -sL -o /tmp/vrm-addon-ext.zip https://github.com/saturday06/VRM-Addon-for-Blender/releases/download/v4.10.5/VRM_Addon_for_Blender-Extension-4_10_5.zip
+          curl -sL -o seed-san.vrm https://raw.githubusercontent.com/vrm-c/vrm-specification/master/samples/Seed-san/vrm/Seed-san.vrm
+          ls -la /tmp/vrm-addon.zip /tmp/vrm-addon-ext.zip seed-san.vrm
+
+      - name: Install VRM Add-on as extension (best effort)
+        continue-on-error: true
+        run: |
+          $HOME/blender/blender --command extension install-file /tmp/vrm-addon-ext.zip || true
+
+      - name: Piper TTS test line (best effort)
+        continue-on-error: true
+        run: |
+          set -e
+          pip install -q piper-tts
+          mkdir -p piper && cd piper
+          curl -sL -o hi_IN-pratham-medium.onnx https://huggingface.co/rhasspy/piper-voices/resolve/main/hi/hi_IN/pratham/medium/hi_IN-pratham-medium.onnx
+          curl -sL -o hi_IN-pratham-medium.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/main/hi/hi_IN/pratham/medium/hi_IN-pratham-medium.onnx.json
+          echo "मैं अजय हूँ — कंपास तभी जागता है जब हम दूसरों को बचाने के लिए लड़ते हैं।" | python3 -m piper --model hi_IN-pratham-medium.onnx --output_file ../test-line.wav
+          ls -la ../test-line.wav
+
+      - name: Render test (headless Blender)
+        run: |
+          set -e
+          time $HOME/blender/blender -b --python test/render_test.py -- --addon-legacy /tmp/vrm-addon.zip --vrm seed-san.vrm --out /tmp/frames
+          echo "frames: $(ls /tmp/frames | wc -l)"
+          ls /tmp/frames | head -3
+
+      - name: Mux video
+        run: |
+          set -e
+          if [ -f test-line.wav ]; then
+            ffmpeg -y -framerate 12 -i /tmp/frames/frame_%04d.png -i test-line.wav -c:v libx264 -pix_fmt yuv420p -c:a aac test-output.mp4
+          else
+            ffmpeg -y -framerate 12 -i /tmp/frames/frame_%04d.png -c:v libx264 -pix_fmt yuv420p test-output.mp4
+          fi
+          ffprobe -v error -show_entries format=duration,size -of default=nw=1 test-output.mp4
+          mkdir -p probe-frames
+          cp /tmp/frames/frame_0001.png /tmp/frames/frame_0030.png /tmp/frames/frame_0060.png /tmp/frames/frame_0061.png /tmp/frames/frame_0090.png /tmp/frames/frame_0120.png probe-frames/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: blender-vrm-test
+          path: |
+            test-output.mp4
+            probe-frames/
+          if-no-files-found: error

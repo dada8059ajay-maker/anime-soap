@@ -5,6 +5,8 @@
 # PASS = <10 min runner time + identical face in both shots + smooth motion.
 # NOTE: bone-axis signs (head yaw axis, arm raise axis) and facing direction
 # are VERIFIED FROM THE RENDERED FRAMES, not assumed -- adjust after frame check.
+# FAIL-LOUD: any import/render failure exits 1 (Blender exits 0 on script
+# exceptions by itself, which hid run #1's failure behind a green step).
 import argparse
 import math
 import os
@@ -21,29 +23,51 @@ def log(msg):
     print(f"[TEST {time.time() - T0:7.1f}s] {msg}", flush=True)
 
 
+def fail(msg):
+    log(f"FATAL: {msg}")
+    sys.exit(1)
+
+
 ap = argparse.ArgumentParser()
 ap.add_argument("--addon-legacy", required=True)
 ap.add_argument("--vrm", required=True)
 ap.add_argument("--out", required=True)
 args = ap.parse_args(sys.argv[sys.argv.index("--") + 1:])
 
+
+def have_vrm_op():
+    return hasattr(bpy.ops.import_scene, "vrm")
+
+
 # --- import VRM (extension install is attempted by the workflow first) ---
 imported = False
-try:
-    bpy.ops.import_scene.vrm(filepath=args.vrm)
-    imported = True
-    log("imported VRM via already-installed add-on")
-except Exception as e:
-    log(f"direct import failed ({e}); trying legacy add-on install")
-    bpy.ops.preferences.addon_install(filepath=args.addon_legacy)
-    bpy.ops.preferences.addon_enable(module="io_scene_vrm")
-    bpy.ops.import_scene.vrm(filepath=args.vrm)
+if have_vrm_op():
+    try:
+        bpy.ops.import_scene.vrm(filepath=args.vrm)
+        imported = True
+        log("imported VRM via already-installed add-on")
+    except Exception as e:
+        log(f"direct import failed: {e}")
+if not imported:
+    log("trying legacy add-on install (module io_scene_vrm)")
+    try:
+        bpy.ops.preferences.addon_install(filepath=args.addon_legacy)
+        bpy.ops.preferences.addon_enable(module="io_scene_vrm")
+    except Exception as e:
+        fail(f"legacy install/enable failed: {e}")
+    if not have_vrm_op():
+        fail("import_scene.vrm still missing after install")
+    try:
+        bpy.ops.import_scene.vrm(filepath=args.vrm)
+    except Exception as e:
+        fail(f"import after legacy install failed: {e}")
     imported = True
     log("imported VRM after legacy add-on install")
 assert imported
 
 arm = next((o for o in bpy.context.scene.objects if o.type == "ARMATURE"), None)
-assert arm, "no armature after VRM import"
+if arm is None:
+    fail("no armature after VRM import")
 log(f"armature: {arm.name}")
 log(f"scene objects: {[o.name for o in bpy.context.scene.objects]}")
 
@@ -164,5 +188,8 @@ t = time.time()
 bpy.ops.render.render(animation=True)
 log(f"render done in {time.time() - t:.1f}s")
 files = sorted(os.listdir(args.out))
-log(f"frames written: {len(files)} (first={files[0] if files else '-'}, last={files[-1] if files else '-'})")
+if not files:
+    fail("no frames rendered")
+log(f"frames written: {len(files)} (first={files[0]}, last={files[-1]})")
 log(f"total script time: {time.time() - T0:.1f}s")
+log("TEST SCRIPT OK")

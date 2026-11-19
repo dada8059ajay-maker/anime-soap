@@ -30,10 +30,21 @@ jobs:
           curl -sL -o seed-san.vrm https://raw.githubusercontent.com/vrm-c/vrm-specification/master/samples/Seed-san/vrm/Seed-san.vrm
           ls -la /tmp/vrm-addon.zip /tmp/vrm-addon-ext.zip seed-san.vrm
 
-      - name: Install VRM Add-on as extension (best effort)
-        continue-on-error: true
+      - name: Install VRM Add-on (extension, strict)
         run: |
-          $HOME/blender/blender --command extension install-file /tmp/vrm-addon-ext.zip || true
+          set -e
+          $HOME/blender/blender --command extension install-file /tmp/vrm-addon-ext.zip
+          $HOME/blender/blender --command extension enable vrm
+          $HOME/blender/blender --command extension list || true
+
+      - name: Repackage legacy add-on as io_scene_vrm (fallback)
+        run: |
+          set -e
+          rm -rf /tmp/vrm-repack && mkdir -p /tmp/vrm-repack
+          unzip -q /tmp/vrm-addon.zip -d /tmp/vrm-repack
+          mv /tmp/vrm-repack/VRM_Addon_for_Blender-release /tmp/vrm-repack/io_scene_vrm
+          cd /tmp/vrm-repack && zip -qr /tmp/vrm-addon-io_scene_vrm.zip io_scene_vrm
+          unzip -l /tmp/vrm-addon-io_scene_vrm.zip | head -5
 
       - name: Piper TTS test line (best effort)
         continue-on-error: true
@@ -49,7 +60,7 @@ jobs:
       - name: Render test (headless Blender)
         run: |
           set -e
-          time $HOME/blender/blender -b --python test/render_test.py -- --addon-legacy /tmp/vrm-addon.zip --vrm seed-san.vrm --out /tmp/frames
+          time $HOME/blender/blender -b --python test/render_test.py -- --addon-legacy /tmp/vrm-addon-io_scene_vrm.zip --vrm seed-san.vrm --out /tmp/frames
           echo "frames: $(ls /tmp/frames | wc -l)"
           ls /tmp/frames | head -3
 

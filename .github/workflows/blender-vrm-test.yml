@@ -17,7 +17,9 @@ jobs:
       - name: Download Blender 5.2.4
         run: |
           set -e
-          curl -sL -o /tmp/blender.tar.xz https://download.blender.org/release/Blender5.2/blender-5.2.4-linux-x64.tar.xz
+          curl -fSL --retry 3 --retry-delay 5 -o /tmp/blender.tar.xz https://download.blender.org/release/Blender5.2/blender-5.2.4-linux-x64.tar.xz
+          test -s /tmp/blender.tar.xz || (echo "Blender tarball is empty" && exit 1)
+          xz -t /tmp/blender.tar.xz || (echo "Blender tarball is NOT a valid xz archive (download corrupt)" && file /tmp/blender.tar.xz && head -c 200 /tmp/blender.tar.xz && exit 1)
           mkdir -p $HOME/blender
           tar -xf /tmp/blender.tar.xz -C $HOME/blender --strip-components=1
           $HOME/blender/blender --version
@@ -25,9 +27,10 @@ jobs:
       - name: Download VRM Add-on + Seed-san
         run: |
           set -e
-          curl -sL -o /tmp/vrm-addon.zip https://github.com/saturday06/VRM-Addon-for-Blender/releases/download/v4.10.5/VRM_Addon_for_Blender-4_10_5.zip
-          curl -sL -o /tmp/vrm-addon-ext.zip https://github.com/saturday06/VRM-Addon-for-Blender/releases/download/v4.10.5/VRM_Addon_for_Blender-Extension-4_10_5.zip
-          curl -sL -o seed-san.vrm https://raw.githubusercontent.com/vrm-c/vrm-specification/master/samples/Seed-san/vrm/Seed-san.vrm
+          curl -fSL --retry 3 --retry-delay 5 -o /tmp/vrm-addon.zip https://github.com/saturday06/VRM-Addon-for-Blender/releases/download/v4.10.5/VRM_Addon_for_Blender-4_10_5.zip
+          curl -fSL --retry 3 --retry-delay 5 -o /tmp/vrm-addon-ext.zip https://github.com/saturday06/VRM-Addon-for-Blender/releases/download/v4.10.5/VRM_Addon_for_Blender-Extension-4_10_5.zip
+          curl -fSL --retry 3 --retry-delay 5 -o seed-san.vrm https://raw.githubusercontent.com/vrm-c/vrm-specification/master/samples/Seed-san/vrm/Seed-san.vrm
+          file /tmp/vrm-addon.zip /tmp/vrm-addon-ext.zip seed-san.vrm
           ls -la /tmp/vrm-addon.zip /tmp/vrm-addon-ext.zip seed-san.vrm
 
       - name: Install VRM Add-on (extension, strict)

@@ -33,8 +33,8 @@ jobs:
       - name: Install VRM Add-on (extension, strict)
         run: |
           set -e
-          $HOME/blender/blender --command extension install-file /tmp/vrm-addon-ext.zip
-          $HOME/blender/blender --command extension enable vrm
+          $HOME/blender/blender --command extension install-file -r user_default -e /tmp/vrm-addon-ext.zip
+          $HOME/blender/blender --command extension enable -r user_default vrm || echo "enable: continuing (install -e may have already enabled it)"
           $HOME/blender/blender --command extension list || true
 
       - name: Repackage legacy add-on as io_scene_vrm (fallback)

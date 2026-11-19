@@ -134,11 +134,32 @@ for b in pb:
         pass
 
 
-def key(bone_name, frame, euler):
-    b = pb.get(bone_name)
-    if b is None:
-        log(f"WARN missing bone {bone_name}")
-        return False
+# VRM add-on bone names (verified locally, run #5 diagnosis): the head bone is
+# "head 1" (the head MESH is also named "head") and the arms are
+# "upper_arm.R" / "forearm.R" -- NOT the VRM humanoid names. A missing
+# REQUIRED bone is FATAL: the old WARN-only key() let run #5 "succeed" with a
+# frozen T-pose.
+BONE_CANDIDATES = {
+    "head": ("head", "head 1", "Head"),
+    "neck": ("neck", "Neck"),
+    "rightUpperArm": ("rightUpperArm", "upper_arm.R", "UpperArm.R"),
+    "rightLowerArm": ("rightLowerArm", "forearm.R", "Forearm.R"),
+}
+BONES = {}
+for role, candidates in BONE_CANDIDATES.items():
+    bone = None
+    for name in candidates:
+        bone = pb.get(name)
+        if bone is not None:
+            break
+    if bone is None:
+        fail(f"required bone missing: {role} (tried: {', '.join(candidates)})")
+    log(f"bone {role}: {bone.name}")
+    BONES[role] = bone
+
+
+def key(role, frame, euler):
+    b = BONES[role]
     b.rotation_euler = euler
     b.keyframe_insert(data_path="rotation_euler", frame=frame)
     return True
